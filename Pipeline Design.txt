@@ -1,0 +1,121 @@
+Pipeline Design:
+---------------
+db.nsx_mobility.aggregate([{$match:{state:'open', dataCenter:'gtdc'}}])
+
+db.nsx_mobility.aggregate([{$match:{state:'open', dataCenter:'gtdc'}},{$project:{_id:0,nsxManager:1}}])
+
+db.nsx_ipaddress.aggregate([{$match:{"state":"available"}},{$group:{_id:'$nsxManager',totalIPsAvailable:{$sum:1}}}])
+
+
+
+1. find the best nsx manager. (gtdc, open, highest number of available IPs)
+
+db.nsx_mobility.aggregate([
+	{$match:{state:'open', dataCenter:'gtdc'}},
+	{$project:{_id:0,nsxManager:1}},
+	{$lookup:{
+		from: 'nsx_ipaddress',
+		localField: 'nsxManager',
+		foreignField: 'nsxManager',
+		as: 'IPs'
+	}},
+	{$unwind: '$IPs'},
+	{$project:{'IPs.nsxManager':1,'IPs.state':1}},
+	{$match:{'IPs.state':'available'}},
+	{$group:{_id:'$IPs.nsxManager',totalIPsAvailable:{$sum:1}}},
+	{$sort:{'totalIPsAvailable':-1}},
+	{$limit:1}
+	])
+
+
+db.nsx_mobility.aggregate([ 
+	{$match:{state:'open', dataCenter:'gtdc'}}, 
+	{$project:{_id:0,nsxManager:1}}, 
+	{$lookup:{ 
+		from: 'nsx_ipaddress', 
+		localField: 'nsxManager', 
+		foreignField: 'nsxManager', 
+		as: 'IPs' }}, 
+	{$unwind: '$IPs'}, 
+	{$project:{'IPs.nsxManager':1,'IPs.state':1, 'IPs.loadBalancer':1}},
+	{$lookup:{
+		from:'nsx_loadbalancer',
+		localField:'IPs.loadBalancer',
+		foreignField:'loadBalancer',
+		as: 'loadbalancerInfo'
+	}},
+	{$unwind: '$loadbalancerInfo'},
+	{$match:{'loadbalancerInfo.state':'open'}},
+	{$match:{'IPs.state':'available'}},
+	{$group:{_id:'$IPs.nsxManager',totalIPsAvailable:{$sum:1}}},
+	{$sort:{'totalIPsAvailable':-1}},
+	{$limit:1}
+	])
+----------------------------------------------------------------------------
+
+db.nsx_loadbalancer.aggregate([{$match:{nsxManager:'nsx3'}}])
+
+2. find the best loadbalancer (open)
+
+db.nsx_loadbalancer.aggregate([
+	{$match:{nsxManager:'nsx3'}},
+	{$project:{_id:0, loadBalancer:1,vcCluster:1,config:1}},
+	{$lookup:{
+		from: 'nsx_ipaddress',
+		localField: 'loadBalancer',
+		foreignField: 'loadBalancer',
+		as: 'IPs'
+	}},
+	{$unwind: '$IPs'},
+	{$project:{'IPs.loadBalancer':1,'IPs.state':1,vcCluster:1,config:1}},
+	{$match:{'IPs.state':'available'}},
+	{$group:{_id:'$IPs.loadBalancer',totalIPsAvailable:{$sum:1},vcCluster:{$first:'$vcCluster'},config:{$first:'$config'}}},
+	{$sort:{'totalIPsAvailable':-1}},
+	{$limit:1}
+	])
+
+
+
+db.nsx_loadbalancer.aggregate([
+	{$match:{$and:[{nsxManager:'nsx3'},{state:'open'}]}},
+	{$project:{_id:0, loadBalancer:1,vcCluster:1,config:1}},
+	{$lookup:{
+		from: 'nsx_ipaddress',
+		localField: 'loadBalancer',
+		foreignField: 'loadBalancer',
+		as: 'IPs'
+	}},
+	{$unwind: '$IPs'},
+	{$project:{'IPs.loadBalancer':1,'IPs.state':1,vcCluster:1,config:1}},
+	{$match:{'IPs.state':'available'}},
+	{$group:{_id:'$IPs.loadBalancer',totalIPsAvailable:{$sum:1},vcCluster:{$first:'$vcCluster'},config:{$first:'$config'}}},
+	{$sort:{'totalIPsAvailable':-1}},
+	{$limit:1}
+	])
+
+
+----------------------------------------------------------------------------
+
+3. find the best first avaialble ip
+
+db.nsx_ipaddress.aggregate([
+	{$match:{loadBalancer:'666-666-666-666-666',state:'available'}},
+	{$project:{_id:0,ipAddress:1}},
+	{$sort:{'ipAddress':1}},
+	{$limit:1}
+	])
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
